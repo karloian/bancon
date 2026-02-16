@@ -303,9 +303,9 @@ class _AdminScreenState extends State<AdminScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Confirm Delete'),
+        title: const Text('Deactivate User'),
         content: Text(
-          'Are you sure you want to delete user: ${user['email']}?',
+          'Set user ${user['email']} as inactive?\n\nThe user will not be able to login.',
         ),
         actions: [
           TextButton(
@@ -314,8 +314,8 @@ class _AdminScreenState extends State<AdminScreen> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Delete'),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            child: const Text('Deactivate'),
           ),
         ],
       ),
@@ -323,24 +323,21 @@ class _AdminScreenState extends State<AdminScreen> {
 
     if (confirm == true) {
       try {
-        // Update status to 0 (inactive) instead of deleting
+        // Update status to 2 (inactive) instead of deleting
         await Supabase.instance.client
             .from('users_db')
-            .update({'status': 0})
+            .update({'status': 2})
             .eq('user_id', userId);
 
         if (mounted) {
-          // Update local list
+          // Remove from local list (hide inactive users)
           setState(() {
-            final index = users.indexWhere((u) => u['user_id'] == userId);
-            if (index != -1) {
-              users[index]['status'] = 0;
-            }
+            users.removeWhere((u) => u['user_id'] == userId);
           });
 
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('User deactivated successfully.')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('User is deactivated.')));
         }
       } catch (error) {
         if (mounted) {
