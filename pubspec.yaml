@@ -1,0 +1,32 @@
+name: bancon
+description: "A new Flutter project."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.10.4
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  supabase_flutter: ^2.8.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  flutter_native_splash: ^2.3.10
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
+
+flutter_native_splash:
+  color: "#ffffff"
+  image: assets/images/img.png
+  android_12:
+    image: assets/images/img.png
+    color: "#ffffff"
+  fullscreen: true
