@@ -35,28 +35,34 @@ class _LoginPageState extends State<LoginPage> {
     setState(() => _isLoading = true);
 
     try {
-      final email = _emailController.text.trim().toLowerCase();
+      final email = _emailController.text.trim();
       final password = _passwordController.text;
-      final response = await Supabase.instance.client
+
+      // Authenticate with Supabase Auth
+      final authResponse = await Supabase.instance.client.auth
+          .signInWithPassword(email: email, password: password);
+
+      if (!mounted) return;
+
+      // Get user profile from users_db
+      final profile = await Supabase.instance.client
           .from('users_db')
-          .select('email, password, role')
-          .ilike('email', email)
-          .eq('status', 1)
-          .maybeSingle();
+          .select('role, status, fullname')
+          .eq('user_id', authResponse.user!.id)
+          .single();
 
-      if (!mounted) {
-        return;
-      }
-
-      if (response == null || response['password'] != password) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Invalid email or password.')),
-        );
+      if (profile['status'] != 1) {
+        await Supabase.instance.client.auth.signOut();
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Account is inactive.')));
+        }
         return;
       }
 
       // Redirect based on user role
-      final String role = response['role']?.toString().toLowerCase() ?? '';
+      final String role = profile['role']?.toString().toLowerCase() ?? '';
       Widget destinationScreen;
 
       switch (role) {
@@ -73,22 +79,25 @@ class _LoginPageState extends State<LoginPage> {
           destinationScreen = const AgentScreen();
           break;
         default:
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('Invalid user role.')));
+          await Supabase.instance.client.auth.signOut();
+          if (mounted) {
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(const SnackBar(content: Text('Invalid user role.')));
+          }
           return;
       }
 
-      Navigator.of(
-        context,
-      ).pushReplacement(MaterialPageRoute(builder: (_) => destinationScreen));
-    } catch (error) {
-      if (!mounted) {
-        return;
+      if (mounted) {
+        Navigator.of(
+          context,
+        ).pushReplacement(MaterialPageRoute(builder: (_) => destinationScreen));
       }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Login failed: $error')));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Login failed: ${error.toString()}')),
+      );
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
