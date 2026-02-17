@@ -20,7 +20,7 @@ class _AgentScreenState extends State<AgentScreen> {
   final _purchaserOwnerController = TextEditingController();
   final _contactNumberController = TextEditingController();
   final _completeAddressController = TextEditingController();
-  final _territoryController = TextEditingController();
+  String? _selectedTerritory;
   final _storeClassificationController = TextEditingController();
   final _tinController = TextEditingController();
   final _paymentTermController = TextEditingController();
@@ -39,6 +39,145 @@ class _AgentScreenState extends State<AgentScreen> {
   int _thisMonthStores = 0;
   bool _isLoadingStats = false;
   List<int> _monthlyStores = List.filled(12, 0);
+
+  // Western Visayas Region 6 - All Municipalities and Cities
+  final List<String> _territories = [
+    // Aklan
+    'Altavas, Aklan',
+    'Balete, Aklan',
+    'Banga, Aklan',
+    'Batan, Aklan',
+    'Buruanga, Aklan',
+    'Ibajay, Aklan',
+    'Kalibo, Aklan',
+    'Lezo, Aklan',
+    'Libacao, Aklan',
+    'Madalag, Aklan',
+    'Makato, Aklan',
+    'Malay, Aklan',
+    'Malinao, Aklan',
+    'Nabas, Aklan',
+    'New Washington, Aklan',
+    'Numancia, Aklan', 'Tangalan, Aklan',
+    // Antique
+    'Anini-y, Antique',
+    'Barbaza, Antique',
+    'Belison, Antique',
+    'Bugasong, Antique',
+    'Caluya, Antique',
+    'Culasi, Antique',
+    'Hamtic, Antique',
+    'Laua-an, Antique',
+    'Libertad, Antique',
+    'Pandan, Antique',
+    'Patnongon, Antique',
+    'San Jose, Antique',
+    'San Remigio, Antique',
+    'Sebaste, Antique',
+    'Sibalom, Antique',
+    'Tibiao, Antique', 'Tobias Fornier, Antique', 'Valderrama, Antique',
+    // Capiz
+    'Cuartero, Capiz',
+    'Dao, Capiz',
+    'Dumalag, Capiz',
+    'Dumarao, Capiz',
+    'Ivisan, Capiz',
+    'Jamindan, Capiz',
+    'Maayon, Capiz',
+    'Mambusao, Capiz',
+    'Panay, Capiz',
+    'Panitan, Capiz',
+    'Pilar, Capiz',
+    'Pontevedra, Capiz',
+    'President Roxas, Capiz',
+    'Sapi-an, Capiz',
+    'Sigma, Capiz',
+    'Tapaz, Capiz', 'Roxas City, Capiz',
+    // Guimaras
+    'Buenavista, Guimaras',
+    'Jordan, Guimaras',
+    'Nueva Valencia, Guimaras',
+    'San Lorenzo, Guimaras',
+    'Sibunag, Guimaras',
+    // Iloilo
+    'Ajuy, Iloilo',
+    'Alimodian, Iloilo',
+    'Anilao, Iloilo',
+    'Badiangan, Iloilo',
+    'Balasan, Iloilo',
+    'Banate, Iloilo',
+    'Barotac Nuevo, Iloilo',
+    'Barotac Viejo, Iloilo',
+    'Batad, Iloilo',
+    'Bingawan, Iloilo',
+    'Cabatuan, Iloilo',
+    'Calinog, Iloilo',
+    'Carles, Iloilo',
+    'Concepcion, Iloilo',
+    'Dingle, Iloilo',
+    'Dueñas, Iloilo',
+    'Dumangas, Iloilo',
+    'Estancia, Iloilo',
+    'Guimbal, Iloilo',
+    'Igbaras, Iloilo',
+    'Janiuay, Iloilo',
+    'Lambunao, Iloilo',
+    'Leganes, Iloilo',
+    'Lemery, Iloilo',
+    'Leon, Iloilo',
+    'Maasin, Iloilo',
+    'Miagao, Iloilo',
+    'Mina, Iloilo',
+    'New Lucena, Iloilo',
+    'Oton, Iloilo',
+    'Pavia, Iloilo',
+    'Pototan, Iloilo',
+    'San Dionisio, Iloilo',
+    'San Enrique, Iloilo',
+    'San Joaquin, Iloilo',
+    'San Miguel, Iloilo',
+    'San Rafael, Iloilo',
+    'Santa Barbara, Iloilo',
+    'Sara, Iloilo',
+    'Tigbauan, Iloilo',
+    'Tubungan, Iloilo',
+    'Zarraga, Iloilo',
+    'Iloilo City, Iloilo',
+    'Passi City, Iloilo',
+    // Negros Occidental
+    'Bacolod City, Negros Occidental',
+    'Bago City, Negros Occidental',
+    'Cadiz City, Negros Occidental',
+    'Escalante City, Negros Occidental',
+    'Himamaylan City, Negros Occidental',
+    'Kabankalan City, Negros Occidental',
+    'La Carlota City, Negros Occidental',
+    'Sagay City, Negros Occidental',
+    'San Carlos City, Negros Occidental',
+    'Silay City, Negros Occidental',
+    'Sipalay City, Negros Occidental',
+    'Talisay City, Negros Occidental',
+    'Victorias City, Negros Occidental',
+    'Binalbagan, Negros Occidental',
+    'Calatrava, Negros Occidental',
+    'Candoni, Negros Occidental',
+    'Cauayan, Negros Occidental',
+    'Enrique B. Magalona, Negros Occidental',
+    'Hinigaran, Negros Occidental',
+    'Hinoba-an, Negros Occidental',
+    'Ilog, Negros Occidental',
+    'Isabela, Negros Occidental',
+    'La Castellana, Negros Occidental',
+    'Manapla, Negros Occidental',
+    'Moises Padilla, Negros Occidental',
+    'Murcia, Negros Occidental',
+    'Pontevedra, Negros Occidental',
+    'Pulupandan, Negros Occidental',
+    'Salvador Benedicto, Negros Occidental',
+    'San Enrique, Negros Occidental',
+    'Toboso, Negros Occidental',
+    'Valladolid, Negros Occidental',
+  ];
 
   @override
   void initState() {
@@ -129,7 +268,6 @@ class _AgentScreenState extends State<AgentScreen> {
     _purchaserOwnerController.dispose();
     _contactNumberController.dispose();
     _completeAddressController.dispose();
-    _territoryController.dispose();
     _storeClassificationController.dispose();
     _tinController.dispose();
     _paymentTermController.dispose();
@@ -251,7 +389,7 @@ class _AgentScreenState extends State<AgentScreen> {
           'purchaser_owner': _purchaserOwnerController.text,
           'contact_number': _contactNumberController.text,
           'complete_address': _completeAddressController.text,
-          'territory': _territoryController.text,
+          'territory': _selectedTerritory,
           'store_classification': _storeClassificationController.text,
           'tin': _tinController.text,
           'payment_term': _paymentTermController.text,
@@ -273,13 +411,13 @@ class _AgentScreenState extends State<AgentScreen> {
           _purchaserOwnerController.clear();
           _contactNumberController.clear();
           _completeAddressController.clear();
-          _territoryController.clear();
           _storeClassificationController.clear();
           _tinController.clear();
           _paymentTermController.clear();
           _priceLevelController.clear();
 
           setState(() {
+            _selectedTerritory = null;
             _storePicture = null;
             _businessPermit = null;
             _mapLatitude = null;
@@ -577,36 +715,46 @@ class _AgentScreenState extends State<AgentScreen> {
   ) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(20),
       child: Container(
-        padding: const EdgeInsets.all(24),
+        height: 140,
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
+          gradient: LinearGradient(
+            colors: [Colors.white, color.withOpacity(0.05)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: color.withOpacity(0.2), width: 1.5),
           boxShadow: [
             BoxShadow(
-              color: color.withOpacity(0.2),
-              blurRadius: 8,
+              color: color.withOpacity(0.08),
+              blurRadius: 12,
               offset: const Offset(0, 4),
             ),
           ],
         ),
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
+                gradient: LinearGradient(
+                  colors: [color.withOpacity(0.15), color.withOpacity(0.25)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
                 shape: BoxShape.circle,
               ),
-              child: Icon(icon, size: 40, color: color),
+              child: Icon(icon, size: 32, color: color),
             ),
             const SizedBox(height: 12),
             Text(
               title,
               style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
                 color: color,
               ),
               textAlign: TextAlign.center,
@@ -624,40 +772,54 @@ class _AgentScreenState extends State<AgentScreen> {
     Color color,
   ) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      height: 110,
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [color, color.withOpacity(0.7)],
+          colors: [color, color.withOpacity(0.85)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: color.withOpacity(0.3),
-            blurRadius: 8,
+            color: color.withOpacity(0.25),
+            blurRadius: 12,
             offset: const Offset(0, 4),
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Icon(icon, color: Colors.white, size: 32),
-          const SizedBox(height: 12),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 32,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Icon(icon, color: Colors.white.withOpacity(0.9), size: 28),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
           ),
           Text(
             label,
             style: TextStyle(
-              fontSize: 14,
-              color: Colors.white.withOpacity(0.9),
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: Colors.white.withOpacity(0.95),
             ),
           ),
         ],
@@ -703,7 +865,7 @@ class _StoreFormScreenState extends State<StoreFormScreen> {
   final _purchaserOwnerController = TextEditingController();
   final _contactNumberController = TextEditingController();
   final _completeAddressController = TextEditingController();
-  final _territoryController = TextEditingController();
+  String? _selectedTerritory;
   final _storeClassificationController = TextEditingController();
   final _tinController = TextEditingController();
   final _paymentTermController = TextEditingController();
@@ -717,6 +879,112 @@ class _StoreFormScreenState extends State<StoreFormScreen> {
   double? _mapLongitude;
 
   final ImagePicker _picker = ImagePicker();
+
+  // Western Visayas Region 6 - All Municipalities and Cities
+  final List<String> _territories = [
+    // Aklan
+    'Altavas, Aklan',
+    'Balete, Aklan',
+    'Banga, Aklan',
+    'Batan, Aklan',
+    'Buruanga, Aklan',
+    'Ibajay, Aklan',
+    'Kalibo, Aklan',
+    'Lezo, Aklan',
+    'Libacao, Aklan',
+    'Madalag, Aklan',
+    'Makato, Aklan',
+    'Malay, Aklan',
+    'Malinao, Aklan',
+    'Nabas, Aklan',
+    'New Washington, Aklan',
+    'Numancia, Aklan', 'Tangalan, Aklan',
+    // Antique
+    'Anini-y, Antique',
+    'Barbaza, Antique',
+    'Belison, Antique',
+    'Bugasong, Antique',
+    'Caluya, Antique',
+    'Culasi, Antique',
+    'Hamtic, Antique',
+    'Laua-an, Antique',
+    'Libertad, Antique',
+    'Pandan, Antique',
+    'Patnongon, Antique',
+    'San Jose, Antique',
+    'San Remigio, Antique',
+    'Sebaste, Antique',
+    'Sibalom, Antique',
+    'Tibiao, Antique', 'Tobias Fornier, Antique', 'Valderrama, Antique',
+    // Capiz
+    'Cuartero, Capiz',
+    'Dao, Capiz',
+    'Dumalag, Capiz',
+    'Dumarao, Capiz',
+    'Ivisan, Capiz',
+    'Jamindan, Capiz',
+    'Maayon, Capiz',
+    'Mambusao, Capiz',
+    'Panay, Capiz',
+    'Panitan, Capiz',
+    'Pilar, Capiz',
+    'Pontevedra, Capiz',
+    'President Roxas, Capiz',
+    'Sapi-an, Capiz',
+    'Sigma, Capiz',
+    'Tapaz, Capiz', 'Roxas City, Capiz',
+    // Guimaras
+    'Buenavista, Guimaras',
+    'Jordan, Guimaras',
+    'Nueva Valencia, Guimaras',
+    'San Lorenzo, Guimaras',
+    'Sibunag, Guimaras',
+    // Iloilo
+    'Ajuy, Iloilo',
+    'Alimodian, Iloilo',
+    'Anilao, Iloilo',
+    'Badiangan, Iloilo',
+    'Balasan, Iloilo',
+    'Banate, Iloilo',
+    'Barotac Nuevo, Iloilo',
+    'Barotac Viejo, Iloilo',
+    'Batad, Iloilo',
+    'Bingawan, Iloilo',
+    'Cabatuan, Iloilo',
+    'Calinog, Iloilo',
+    'Carles, Iloilo',
+    'Concepcion, Iloilo',
+    'Dingle, Iloilo',
+    'Dueñas, Iloilo',
+    'Dumangas, Iloilo',
+    'Estancia, Iloilo',
+    'Guimbal, Iloilo',
+    'Igbaras, Iloilo',
+    'Janiuay, Iloilo',
+    'Lambunao, Iloilo',
+    'Leganes, Iloilo',
+    'Lemery, Iloilo',
+    'Leon, Iloilo',
+    'Maasin, Iloilo',
+    'Miagao, Iloilo',
+    'Mina, Iloilo',
+    'New Lucena, Iloilo',
+    'Oton, Iloilo',
+    'Pavia, Iloilo',
+    'Pototan, Iloilo',
+    'San Dionisio, Iloilo',
+    'San Enrique, Iloilo',
+    'San Joaquin, Iloilo',
+    'San Miguel, Iloilo',
+    'San Rafael, Iloilo',
+    'Santa Barbara, Iloilo',
+    'Sara, Iloilo',
+    'Tigbauan, Iloilo',
+    'Tubungan, Iloilo',
+    'Zarraga, Iloilo',
+    'Iloilo City, Iloilo',
+    'Passi City, Iloilo',
+  ];
 
   @override
   void initState() {
@@ -757,7 +1025,6 @@ class _StoreFormScreenState extends State<StoreFormScreen> {
     _purchaserOwnerController.dispose();
     _contactNumberController.dispose();
     _completeAddressController.dispose();
-    _territoryController.dispose();
     _storeClassificationController.dispose();
     _tinController.dispose();
     _paymentTermController.dispose();
@@ -874,7 +1141,7 @@ class _StoreFormScreenState extends State<StoreFormScreen> {
           'purchaser_owner': _purchaserOwnerController.text,
           'contact_number': _contactNumberController.text,
           'complete_address': _completeAddressController.text,
-          'territory': _territoryController.text,
+          'territory': _selectedTerritory,
           'store_classification': _storeClassificationController.text,
           'tin': _tinController.text,
           'payment_term': _paymentTermController.text,
@@ -1038,8 +1305,8 @@ class _StoreFormScreenState extends State<StoreFormScreen> {
                         const SizedBox(height: 16),
 
                         // Territory
-                        TextFormField(
-                          controller: _territoryController,
+                        DropdownButtonFormField<String>(
+                          value: _selectedTerritory,
                           decoration: InputDecoration(
                             labelText: 'Territory',
                             prefixIcon: const Icon(Icons.map_rounded),
@@ -1049,8 +1316,19 @@ class _StoreFormScreenState extends State<StoreFormScreen> {
                             filled: true,
                             fillColor: Colors.grey[50],
                           ),
+                          items: _territories.map((String territory) {
+                            return DropdownMenuItem<String>(
+                              value: territory,
+                              child: Text(territory),
+                            );
+                          }).toList(),
+                          onChanged: (String? newValue) {
+                            setState(() {
+                              _selectedTerritory = newValue;
+                            });
+                          },
                           validator: (value) =>
-                              value?.isEmpty ?? true ? 'Required' : null,
+                              value == null ? 'Required' : null,
                         ),
                         const SizedBox(height: 16),
 
