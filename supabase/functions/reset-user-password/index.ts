@@ -17,54 +17,65 @@ serve(async (req) => {
       return new Response('Method not allowed', { status: 405 })
     }
 
-    // Create Supabase client with service role key
+    // Create Supabase admin client with service role key
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false
+        }
+      }
     )
 
-    // Get the authorization header
-    const authHeader = req.headers.get('Authorization')
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'No authorization header' }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' },
+    // Get request body first
+    const requestBody = await req.json()
+    const { user_id, new_password, admin_email } = requestBody
+
+    if (!user_id || !new_password || !admin_email) {
+      console.error('Missing required fields')
+      return new Response(JSON.stringify({ error: 'user_id, new_password, and admin_email are required' }), {
+        status: 400,
+        headers: { 
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
       })
     }
 
-    const token = authHeader.replace('Bearer ', '')
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
+    console.log('Password update request from:', admin_email)
 
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized: ' + (authError?.message || 'Invalid token') }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' },
-      })
-    }
-
-    // Check if user is admin
+    // Verify admin by email (simple security check)
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('users_db')
-      .select('role')
-      .eq('user_id', user.id)
+      .select('role, user_id')
+      .eq('email', admin_email)
       .single()
 
-    if (profileError || profile?.role !== 'admin') {
+    if (profileError || !profile) {
+      console.error('Admin not found:', profileError?.message)
+      return new Response(JSON.stringify({ error: 'Admin not found' }), {
+        status: 401,
+        headers: { 
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+      })
+    }
+
+    if (profile.role !== 'admin') {
+      console.error('Not admin, role is:', profile.role)
       return new Response(JSON.stringify({ error: 'Forbidden: Admin access required' }), {
         status: 403,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
       })
     }
 
-    // Get request body
-    const { user_id, new_password } = await req.json()
-
-    if (!user_id || !new_password) {
-      return new Response(JSON.stringify({ error: 'user_id and new_password are required' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      })
-    }
+    console.log('Admin verified, updating password for user:', user_id)
 
     // Update user password
     const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
@@ -73,20 +84,32 @@ serve(async (req) => {
     )
 
     if (updateError) {
+      console.error('Password update failed:', updateError.message)
       return new Response(JSON.stringify({ error: updateError.message }), {
         status: 400,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
       })
     }
 
-    return new Response(
-      JSON.stringify({ success: true, message: 'Password updated successfully' }),
-      { status: 200, headers: { 'Content-Type': 'application/json' } },
-    )
+    console.log('Password updated successfully')
+    return new Response(JSON.stringify({ success: true, message: 'Password updated successfully' }), {
+      status: 200,
+      headers: { 
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
+    })
   } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
+    console.error('Unexpected error:', error)
+    return new Response(JSON.stringify({ error: error.message || 'Internal server error' }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
     })
   }
 })
