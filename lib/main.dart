@@ -5,6 +5,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'config/supabase_config.dart';
 import 'screen/login_screen.dart';
+import 'screen/admin_screen.dart';
+import 'screen/supervisor_screen.dart';
+import 'screen/encoder_screen.dart';
+import 'screen/agent_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -58,11 +62,77 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    Timer(const Duration(seconds: 3), () {
+    _checkSession();
+  }
+
+  Future<void> _checkSession() async {
+    await Future.delayed(const Duration(seconds: 2));
+
+    if (!mounted) return;
+
+    final session = Supabase.instance.client.auth.currentSession;
+
+    if (session != null) {
+      // User is logged in, get their role and navigate
+      try {
+        final profile = await Supabase.instance.client
+            .from('users_db')
+            .select('role, status')
+            .eq('user_id', session.user.id)
+            .single();
+
+        if (!mounted) return;
+
+        if (profile['status'] != 1) {
+          await Supabase.instance.client.auth.signOut();
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const LoginPage()),
+          );
+          return;
+        }
+
+        Widget destinationScreen;
+        final String role = profile['role']?.toString().toLowerCase() ?? '';
+
+        switch (role) {
+          case 'admin':
+            destinationScreen = const AdminScreen();
+            break;
+          case 'supervisor':
+            destinationScreen = const SupervisorScreen();
+            break;
+          case 'encoder':
+            destinationScreen = const EncoderScreen();
+            break;
+          case 'agent':
+            destinationScreen = const AgentScreen();
+            break;
+          default:
+            await Supabase.instance.client.auth.signOut();
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (_) => const LoginPage()),
+            );
+            return;
+        }
+
+        Navigator.of(
+          context,
+        ).pushReplacement(MaterialPageRoute(builder: (_) => destinationScreen));
+      } catch (e) {
+        // If offline and can't fetch profile, still try to navigate based on cached data
+        // For now, just go to login
+        if (mounted) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const LoginPage()),
+          );
+        }
+      }
+    } else {
+      // No session, go to login
       Navigator.of(
         context,
       ).pushReplacement(MaterialPageRoute(builder: (_) => const LoginPage()));
-    });
+    }
   }
 
   @override

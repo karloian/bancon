@@ -95,8 +95,25 @@ class _LoginPageState extends State<LoginPage> {
       }
     } catch (error) {
       if (!mounted) return;
+
+      String errorMessage = 'Login failed';
+
+      if (error.toString().contains('SocketException') ||
+          error.toString().contains('Failed host lookup') ||
+          error.toString().contains('Network is unreachable')) {
+        errorMessage =
+            'No internet connection. Please connect to the internet to login.';
+      } else if (error.toString().contains('Invalid login credentials')) {
+        errorMessage = 'Invalid email or password';
+      } else {
+        errorMessage = 'Login failed: ${error.toString()}';
+      }
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Login failed: ${error.toString()}')),
+        SnackBar(
+          content: Text(errorMessage),
+          duration: const Duration(seconds: 4),
+        ),
       );
     } finally {
       if (mounted) {

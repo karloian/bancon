@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/sync_service.dart';
 import '../services/local_database.dart';
 
@@ -220,6 +221,21 @@ class _AgentScreenState extends State<AgentScreen> {
   Future<void> _loadUserInfo() async {
     final user = Supabase.instance.client.auth.currentUser;
     if (user != null) {
+      final prefs = await SharedPreferences.getInstance();
+      final cachedFullname = prefs.getString('user_fullname');
+
+      // Set cached values immediately
+      if (mounted) {
+        setState(() {
+          _agentCodeController.text = user.id;
+          if (cachedFullname != null && cachedFullname.isNotEmpty) {
+            _salesPersonController.text = cachedFullname;
+            _agentFullName = cachedFullname;
+          }
+        });
+      }
+
+      // Try to fetch fresh data from Supabase
       try {
         final response = await Supabase.instance.client
             .from('users_db')
@@ -227,15 +243,20 @@ class _AgentScreenState extends State<AgentScreen> {
             .eq('user_id', user.id)
             .single();
 
+        final fullname = response['fullname'] ?? '';
+
+        // Cache the fullname
+        await prefs.setString('user_fullname', fullname);
+
         if (mounted) {
           setState(() {
-            _agentCodeController.text = user.id;
-            _salesPersonController.text = response['fullname'] ?? '';
-            _agentFullName = response['fullname'] ?? '';
+            _salesPersonController.text = fullname;
+            _agentFullName = fullname;
           });
         }
       } catch (e) {
-        if (mounted) {
+        // If offline or error, cached values are already set above
+        if (mounted && cachedFullname == null) {
           setState(() {
             _agentCodeController.text = user.id;
           });
@@ -582,6 +603,15 @@ class _AgentScreenState extends State<AgentScreen> {
                   ),
                 ],
               ),
+              const SizedBox(height: 16),
+              // Pending Sync Card
+              if (_pendingUploads > 0)
+                _buildActionCard(
+                  'Pending Sync ($_pendingUploads)',
+                  Icons.cloud_upload_outlined,
+                  Colors.orange,
+                  () => _viewPendingStores(),
+                ),
               const SizedBox(height: 32),
 
               // Analytics Section
@@ -934,6 +964,13 @@ class _AgentScreenState extends State<AgentScreen> {
       MaterialPageRoute(builder: (context) => const StoresListScreen()),
     );
   }
+
+  void _viewPendingStores() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const PendingSyncScreen()),
+    );
+  }
 }
 
 // Store Form Screen
@@ -1083,6 +1120,20 @@ class _StoreFormScreenState extends State<StoreFormScreen> {
   Future<void> _loadUserInfo() async {
     final user = Supabase.instance.client.auth.currentUser;
     if (user != null) {
+      final prefs = await SharedPreferences.getInstance();
+      final cachedFullname = prefs.getString('user_fullname');
+
+      // Set cached values immediately
+      if (mounted) {
+        setState(() {
+          _agentCodeController.text = user.id;
+          if (cachedFullname != null && cachedFullname.isNotEmpty) {
+            _salesPersonController.text = cachedFullname;
+          }
+        });
+      }
+
+      // Try to fetch fresh data from Supabase
       try {
         final response = await Supabase.instance.client
             .from('users_db')
@@ -1090,14 +1141,19 @@ class _StoreFormScreenState extends State<StoreFormScreen> {
             .eq('user_id', user.id)
             .single();
 
+        final fullname = response['fullname'] ?? '';
+
+        // Cache the fullname
+        await prefs.setString('user_fullname', fullname);
+
         if (mounted) {
           setState(() {
-            _agentCodeController.text = user.id;
-            _salesPersonController.text = response['fullname'] ?? '';
+            _salesPersonController.text = fullname;
           });
         }
       } catch (e) {
-        if (mounted) {
+        // If offline or error, cached values are already set above
+        if (mounted && cachedFullname == null) {
           setState(() {
             _agentCodeController.text = user.id;
           });
@@ -1223,13 +1279,14 @@ class _StoreFormScreenState extends State<StoreFormScreen> {
         final user = Supabase.instance.client.auth.currentUser;
         if (user == null) throw Exception('Not authenticated');
 
-        await Supabase.instance.client.from('store_information').insert({
+        // Prepare store data
+        final storeData = {
           'date': _dateController.text,
           'store_name': _storeNameController.text,
           'purchaser_owner': _purchaserOwnerController.text,
           'contact_number': _contactNumberController.text,
           'complete_address': _completeAddressController.text,
-          'territory': _selectedTerritory,
+          'territory': _selectedTerritory ?? '',
           'store_classification': _storeClassificationController.text,
           'tin': _tinController.text,
           'payment_term': _paymentTermController.text,
@@ -1239,7 +1296,12 @@ class _StoreFormScreenState extends State<StoreFormScreen> {
           'map_latitude': _mapLatitude,
           'map_longitude': _mapLongitude,
           'agent_id': user.id,
-        });
+          'store_picture_url': null,
+          'business_permit_url': null,
+        };
+
+        // Use SyncService to save offline-first
+        await SyncService.instance.saveStoreOffline(storeData);
 
         if (mounted) {
           Navigator.pop(context); // Close loading dialog
@@ -1248,7 +1310,7 @@ class _StoreFormScreenState extends State<StoreFormScreen> {
 
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Store information saved successfully!'),
+              content: Text('Store saved! Will sync when online.'),
               backgroundColor: Colors.green,
             ),
           );
@@ -2003,6 +2065,299 @@ class _StoresListScreenState extends State<StoresListScreen> {
           Expanded(child: Text(value?.toString() ?? 'N/A')),
         ],
       ),
+    );
+  }
+}
+
+// Pending Sync Screen
+class PendingSyncScreen extends StatefulWidget {
+  const PendingSyncScreen({super.key});
+
+  @override
+  State<PendingSyncScreen> createState() => _PendingSyncScreenState();
+}
+
+class _PendingSyncScreenState extends State<PendingSyncScreen> {
+  List<Map<String, dynamic>> pendingStores = [];
+  bool isLoading = false;
+  final SyncService _syncService = SyncService.instance;
+  SyncStatus _syncStatus = SyncStatus.idle;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPendingStores();
+
+    // Listen to sync status
+    _syncService.syncStatusStream.listen((status) {
+      if (mounted) {
+        setState(() {
+          _syncStatus = status;
+        });
+        if (status == SyncStatus.success) {
+          _loadPendingStores(); // Reload after successful sync
+        }
+      }
+    });
+  }
+
+  Future<void> _loadPendingStores() async {
+    setState(() => isLoading = true);
+
+    try {
+      final stores = await _syncService.getAllLocalStores();
+      if (mounted) {
+        setState(() {
+          pendingStores = stores;
+          isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading pending stores: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _syncNow() async {
+    await _syncService.syncPendingStores();
+  }
+
+  Future<void> _deleteStore(int localId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Store'),
+        content: const Text(
+          'Are you sure you want to delete this pending store?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await LocalDatabase.instance.deleteStore(localId.toString());
+      _loadPendingStores();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Store deleted'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.grey[100],
+      appBar: AppBar(
+        title: const Text(
+          'Pending Sync',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: const Color(0xFF00529B),
+        foregroundColor: Colors.white,
+        elevation: 0,
+        actions: [
+          if (pendingStores.isNotEmpty)
+            IconButton(
+              icon: Icon(
+                _syncStatus == SyncStatus.syncing
+                    ? Icons.sync
+                    : Icons.cloud_upload_outlined,
+              ),
+              onPressed: _syncStatus == SyncStatus.syncing ? null : _syncNow,
+              tooltip: 'Sync All',
+            ),
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded),
+            onPressed: _loadPendingStores,
+            tooltip: 'Refresh',
+          ),
+        ],
+      ),
+      body: isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : pendingStores.isEmpty
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.cloud_done_outlined,
+                    size: 80,
+                    color: Colors.grey[400],
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'All synced!',
+                    style: TextStyle(
+                      fontSize: 18,
+                      color: Colors.grey[600],
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'No pending stores to sync',
+                    style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+                  ),
+                ],
+              ),
+            )
+          : ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: pendingStores.length,
+              itemBuilder: (context, index) {
+                final store = pendingStores[index];
+                final syncStatus = store['sync_status'] ?? 'pending';
+                Color statusColor;
+                IconData statusIcon;
+                String statusText;
+
+                switch (syncStatus) {
+                  case 'synced':
+                    statusColor = Colors.green;
+                    statusIcon = Icons.check_circle;
+                    statusText = 'Synced';
+                    break;
+                  case 'failed':
+                    statusColor = Colors.red;
+                    statusIcon = Icons.error;
+                    statusText = 'Failed';
+                    break;
+                  default:
+                    statusColor = Colors.orange;
+                    statusIcon = Icons.pending;
+                    statusText = 'Pending';
+                }
+
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  elevation: 2,
+                  color: statusColor.withOpacity(0.05),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(color: statusColor.withOpacity(0.3)),
+                  ),
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.all(16),
+                    leading: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: statusColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(statusIcon, color: statusColor),
+                    ),
+                    title: Text(
+                      store['store_name'] ?? 'N/A',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: statusColor,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            statusText,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Owner: ${store['purchaser_owner'] ?? 'N/A'}',
+                          style: TextStyle(color: Colors.grey[600]),
+                        ),
+                        Text(
+                          'Territory: ${store['territory'] ?? 'N/A'}',
+                          style: TextStyle(color: Colors.grey[600]),
+                        ),
+                        if (store['error_message'] != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              'Error: ${store['error_message']}',
+                              style: const TextStyle(
+                                color: Colors.red,
+                                fontSize: 12,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                      ],
+                    ),
+                    trailing: PopupMenuButton<String>(
+                      onSelected: (value) {
+                        if (value == 'delete') {
+                          _deleteStore(store['local_id']);
+                        } else if (value == 'retry') {
+                          _syncNow();
+                        }
+                      },
+                      itemBuilder: (context) => [
+                        if (syncStatus == 'failed')
+                          const PopupMenuItem(
+                            value: 'retry',
+                            child: Row(
+                              children: [
+                                Icon(Icons.refresh, size: 20),
+                                SizedBox(width: 8),
+                                Text('Retry Sync'),
+                              ],
+                            ),
+                          ),
+                        const PopupMenuItem(
+                          value: 'delete',
+                          child: Row(
+                            children: [
+                              Icon(Icons.delete, size: 20, color: Colors.red),
+                              SizedBox(width: 8),
+                              Text(
+                                'Delete',
+                                style: TextStyle(color: Colors.red),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
     );
   }
 }
