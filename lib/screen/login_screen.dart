@@ -96,7 +96,7 @@ class _LoginPageState extends State<LoginPage> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Invalid Email address or password')),
+        SnackBar(content: Text('Login failed: ${error.toString()}')),
       );
     } finally {
       if (mounted) {
@@ -213,6 +213,20 @@ class _LoginPageState extends State<LoginPage> {
                 ),
               ),
               const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: _isTestingConnection ? null : _testConnection,
+                icon: _isTestingConnection
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.wifi_find),
+                label: const Text('Test Database Connection'),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 45),
+                ),
+              ),
             ],
           ),
         ),
