@@ -4,7 +4,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'package:fl_chart/fl_chart.dart';
+import '../services/sync_service.dart';
+import '../services/local_database.dart';
 
 class AgentScreen extends StatefulWidget {
   const AgentScreen({super.key});
@@ -39,6 +40,12 @@ class _AgentScreenState extends State<AgentScreen> {
   int _thisMonthStores = 0;
   bool _isLoadingStats = false;
   List<int> _monthlyStores = List.filled(12, 0);
+
+  // Offline sync
+  final SyncService _syncService = SyncService.instance;
+  int _pendingUploads = 0;
+  SyncStatus _syncStatus = SyncStatus.idle;
+  String _agentFullName = '';
 
   // Western Visayas Region 6 - All Municipalities and Cities
   final List<String> _territories = [
@@ -184,6 +191,30 @@ class _AgentScreenState extends State<AgentScreen> {
     super.initState();
     _loadUserInfo();
     _loadStats();
+    _initializeSync();
+  }
+
+  void _initializeSync() {
+    _syncService.startListening();
+    _updatePendingCount();
+
+    _syncService.syncStatusStream.listen((status) {
+      if (mounted) {
+        setState(() {
+          _syncStatus = status;
+        });
+        _updatePendingCount();
+      }
+    });
+  }
+
+  Future<void> _updatePendingCount() async {
+    final count = await _syncService.getPendingCount();
+    if (mounted) {
+      setState(() {
+        _pendingUploads = count;
+      });
+    }
   }
 
   Future<void> _loadUserInfo() async {
@@ -200,6 +231,7 @@ class _AgentScreenState extends State<AgentScreen> {
           setState(() {
             _agentCodeController.text = user.id;
             _salesPersonController.text = response['fullname'] ?? '';
+            _agentFullName = response['fullname'] ?? '';
           });
         }
       } catch (e) {
@@ -382,8 +414,8 @@ class _AgentScreenState extends State<AgentScreen> {
         final user = Supabase.instance.client.auth.currentUser;
         if (user == null) throw Exception('Not authenticated');
 
-        // Insert data into database (without image uploads for now)
-        await Supabase.instance.client.from('store_information').insert({
+        // Prepare store data
+        final storeData = {
           'date': _dateController.text,
           'store_name': _storeNameController.text,
           'purchaser_owner': _purchaserOwnerController.text,
@@ -396,10 +428,15 @@ class _AgentScreenState extends State<AgentScreen> {
           'price_level': _priceLevelController.text,
           'agent_code': _agentCodeController.text,
           'sales_person': _salesPersonController.text,
+          'store_picture_url': null,
+          'business_permit_url': null,
           'map_latitude': _mapLatitude,
           'map_longitude': _mapLongitude,
           'agent_id': user.id,
-        });
+        };
+
+        // Save offline first (always succeeds, syncs when online)
+        await _syncService.saveStoreOffline(storeData);
 
         if (mounted) {
           Navigator.pop(context); // Close loading dialog
@@ -427,9 +464,17 @@ class _AgentScreenState extends State<AgentScreen> {
           // Reload user info to restore agent code and sales person
           _loadUserInfo();
 
+          // Update pending count
+          _updatePendingCount();
+
+          final hasInternet = await _syncService.hasInternetConnection();
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Store information saved successfully!'),
+            SnackBar(
+              content: Text(
+                hasInternet
+                    ? 'Store saved and syncing to server!'
+                    : 'Store saved offline. Will sync when online.',
+              ),
               backgroundColor: Colors.green,
             ),
           );
@@ -461,6 +506,41 @@ class _AgentScreenState extends State<AgentScreen> {
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
+          if (_pendingUploads > 0)
+            Stack(
+              children: [
+                IconButton(
+                  icon: Icon(
+                    _syncStatus == SyncStatus.syncing
+                        ? Icons.sync
+                        : Icons.cloud_upload_outlined,
+                  ),
+                  onPressed: () => _syncService.syncPendingStores(),
+                  tooltip: 'Sync pending stores',
+                ),
+                Positioned(
+                  right: 8,
+                  top: 8,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: _syncStatus == SyncStatus.error
+                          ? Colors.red
+                          : Colors.orange,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Text(
+                      _pendingUploads > 9 ? '9+' : '$_pendingUploads',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           IconButton(
             icon: const Icon(Icons.logout_rounded),
             onPressed: () async {
