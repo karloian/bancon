@@ -496,7 +496,6 @@ class _AgentScreenState extends State<AgentScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[100],
       appBar: AppBar(
         title: Text(
           'Welcome - ${_salesPersonController.text}',
@@ -553,12 +552,14 @@ class _AgentScreenState extends State<AgentScreen> {
           ),
         ],
       ),
+      backgroundColor: const Color(0xFFF8F9FA),
       body: SingleChildScrollView(
         child: Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.all(20.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const SizedBox(height: 8),
               // Action Cards
               Row(
                 children: [
@@ -581,18 +582,19 @@ class _AgentScreenState extends State<AgentScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 32),
 
               // Analytics Section
-              const Text(
+              Text(
                 'Analytics',
                 style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.grey[900],
+                  letterSpacing: 0.5,
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
 
               // Summary Stats
               _isLoadingStats
@@ -622,25 +624,34 @@ class _AgentScreenState extends State<AgentScreen> {
 
               // Monthly Chart
               if (!_isLoadingStats)
-                Card(
-                  elevation: 2,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.04),
+                        blurRadius: 10,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
                   ),
                   child: Padding(
-                    padding: const EdgeInsets.all(16.0),
+                    padding: const EdgeInsets.all(0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'New Stores (${DateTime.now().year})',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black87,
+                          'Monthly Overview ${DateTime.now().year}',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey[800],
+                            letterSpacing: 0.3,
                           ),
                         ),
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 20),
                         SizedBox(
                           height: 250,
                           child: BarChart(
@@ -852,20 +863,16 @@ class _AgentScreenState extends State<AgentScreen> {
     Color color,
   ) {
     return Container(
-      height: 110,
-      padding: const EdgeInsets.all(16),
+      height: 100,
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [color, color.withOpacity(0.85)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: color.withOpacity(0.25),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
@@ -876,20 +883,21 @@ class _AgentScreenState extends State<AgentScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Icon(icon, color: Colors.white.withOpacity(0.9), size: 28),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: color.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Text(
-                  value,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
+                child: Icon(icon, color: color, size: 20),
+              ),
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                  height: 1,
                 ),
               ),
             ],
@@ -897,7 +905,7 @@ class _AgentScreenState extends State<AgentScreen> {
           Text(
             label,
             style: TextStyle(
-              fontSize: 13,
+              fontSize: 12,
               fontWeight: FontWeight.w500,
               color: Colors.white.withOpacity(0.95),
             ),
@@ -1564,14 +1572,19 @@ class StoresListScreen extends StatefulWidget {
 
 class _StoresListScreenState extends State<StoresListScreen> {
   List<Map<String, dynamic>> stores = [];
+  List<Map<String, dynamic>> filteredStores = [];
   bool isLoading = false;
   dynamic _realtimeChannel;
+  final TextEditingController _searchController = TextEditingController();
+  int _currentPage = 0;
+  final int _itemsPerPage = 5;
 
   @override
   void initState() {
     super.initState();
     _loadStores();
     _setupRealtimeSubscription();
+    _searchController.addListener(_filterStores);
   }
 
   void _setupRealtimeSubscription() {
@@ -1599,8 +1612,29 @@ class _StoresListScreenState extends State<StoresListScreen> {
 
   @override
   void dispose() {
+    _searchController.dispose();
     _realtimeChannel?.unsubscribe();
     super.dispose();
+  }
+
+  void _filterStores() {
+    final query = _searchController.text.toLowerCase();
+    setState(() {
+      if (query.isEmpty) {
+        filteredStores = stores;
+      } else {
+        filteredStores = stores.where((store) {
+          final storeName = (store['store_name'] ?? '')
+              .toString()
+              .toLowerCase();
+          final owner = (store['purchaser_owner'] ?? '')
+              .toString()
+              .toLowerCase();
+          return storeName.contains(query) || owner.contains(query);
+        }).toList();
+      }
+      _currentPage = 0;
+    });
   }
 
   Future<void> _loadStores() async {
@@ -1619,6 +1653,8 @@ class _StoresListScreenState extends State<StoresListScreen> {
       if (mounted) {
         setState(() {
           stores = List<Map<String, dynamic>>.from(response);
+          filteredStores = stores;
+          _currentPage = 0;
           isLoading = false;
         });
       }
@@ -1654,128 +1690,261 @@ class _StoresListScreenState extends State<StoresListScreen> {
       ),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
-          : stores.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.store_outlined, size: 80, color: Colors.grey[400]),
-                  const SizedBox(height: 16),
-                  Text(
-                    'No stores found',
-                    style: TextStyle(
-                      fontSize: 18,
-                      color: Colors.grey[600],
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            )
-          : ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: stores.length,
-              itemBuilder: (context, index) {
-                final store = stores[index];
-                final status = store['status'] ?? 1;
-                Color backgroundColor;
-                String statusText;
-
-                // Determine background color and status text based on status
-                if (status == 1) {
-                  backgroundColor = Colors.red.shade50;
-                  statusText = 'Pending for approval';
-                } else if (status == 2) {
-                  backgroundColor = Colors.green.shade50;
-                  statusText = 'Approve for Encoding';
-                } else if (status == 3) {
-                  backgroundColor = Colors.yellow.shade50;
-                  statusText = 'Encoded';
-                } else {
-                  backgroundColor = Colors.grey.shade50;
-                  statusText = 'Unknown';
-                }
-
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  elevation: 2,
-                  color: backgroundColor,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.all(16),
-                    leading: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF00529B).withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(
-                        Icons.store_rounded,
+          : Column(
+              children: [
+                // Search Box
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: TextField(
+                    controller: _searchController,
+                    decoration: InputDecoration(
+                      hintText: 'Search by store name or owner...',
+                      prefixIcon: const Icon(
+                        Icons.search,
                         color: Color(0xFF00529B),
                       ),
-                    ),
-                    title: Text(
-                      store['store_name'] ?? 'N/A',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
+                      suffixIcon: _searchController.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear),
+                              onPressed: () {
+                                _searchController.clear();
+                              },
+                            )
+                          : null,
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(
+                          color: Color(0xFF00529B),
+                          width: 2,
+                        ),
                       ),
                     ),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const SizedBox(height: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: status == 1
-                                ? Colors.red.shade100
-                                : status == 2
-                                ? Colors.green.shade100
-                                : Colors.yellow.shade100,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            statusText,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: status == 1
-                                  ? Colors.red.shade900
-                                  : status == 2
-                                  ? Colors.green.shade900
-                                  : Colors.yellow.shade900,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Owner: ${store['purchaser_owner'] ?? 'N/A'}',
-                          style: TextStyle(color: Colors.grey[600]),
-                        ),
-                        Text(
-                          'Territory: ${store['territory'] ?? 'N/A'}',
-                          style: TextStyle(color: Colors.grey[600]),
-                        ),
-                        Text(
-                          'Date: ${store['date'] ?? 'N/A'}',
-                          style: TextStyle(color: Colors.grey[600]),
-                        ),
-                      ],
-                    ),
-                    trailing: const Icon(Icons.chevron_right_rounded),
-                    onTap: () {
-                      // Show store details
-                      _showStoreDetails(store);
-                    },
                   ),
-                );
-              },
+                ),
+                // Content
+                Expanded(
+                  child: filteredStores.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.store_outlined,
+                                size: 80,
+                                color: Colors.grey[400],
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                _searchController.text.isEmpty
+                                    ? 'No stores found'
+                                    : 'No matching stores',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  color: Colors.grey[600],
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : Column(
+                          children: [
+                            Expanded(
+                              child: ListView.builder(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                ),
+                                itemCount: (() {
+                                  final startIndex =
+                                      _currentPage * _itemsPerPage;
+                                  final endIndex = startIndex + _itemsPerPage;
+                                  return endIndex > filteredStores.length
+                                      ? filteredStores.length - startIndex
+                                      : _itemsPerPage;
+                                })(),
+                                itemBuilder: (context, index) {
+                                  final storeIndex =
+                                      _currentPage * _itemsPerPage + index;
+                                  final store = filteredStores[storeIndex];
+                                  final status = store['status'] ?? 1;
+                                  Color backgroundColor;
+                                  String statusText;
+
+                                  // Determine background color and status text based on status
+                                  if (status == 1) {
+                                    backgroundColor = Colors.red.shade50;
+                                    statusText = 'Pending for approval';
+                                  } else if (status == 2) {
+                                    backgroundColor = Colors.green.shade50;
+                                    statusText = 'Approve for Encoding';
+                                  } else if (status == 3) {
+                                    backgroundColor = Colors.yellow.shade50;
+                                    statusText = 'Encoded';
+                                  } else {
+                                    backgroundColor = Colors.grey.shade50;
+                                    statusText = 'Unknown';
+                                  }
+
+                                  return Card(
+                                    margin: const EdgeInsets.only(bottom: 12),
+                                    elevation: 2,
+                                    color: backgroundColor,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: ListTile(
+                                      contentPadding: const EdgeInsets.all(16),
+                                      leading: Container(
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: const Color(
+                                            0xFF00529B,
+                                          ).withOpacity(0.1),
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                        ),
+                                        child: const Icon(
+                                          Icons.store_rounded,
+                                          color: Color(0xFF00529B),
+                                        ),
+                                      ),
+                                      title: Text(
+                                        store['store_name'] ?? 'N/A',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                      subtitle: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          const SizedBox(height: 4),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 4,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: status == 1
+                                                  ? Colors.red.shade100
+                                                  : status == 2
+                                                  ? Colors.green.shade100
+                                                  : Colors.yellow.shade100,
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                            ),
+                                            child: Text(
+                                              statusText,
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.bold,
+                                                color: status == 1
+                                                    ? Colors.red.shade900
+                                                    : status == 2
+                                                    ? Colors.green.shade900
+                                                    : Colors.yellow.shade900,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            'Owner: ${store['purchaser_owner'] ?? 'N/A'}',
+                                            style: TextStyle(
+                                              color: Colors.grey[600],
+                                            ),
+                                          ),
+                                          Text(
+                                            'Territory: ${store['territory'] ?? 'N/A'}',
+                                            style: TextStyle(
+                                              color: Colors.grey[600],
+                                            ),
+                                          ),
+                                          Text(
+                                            'Date: ${store['date'] ?? 'N/A'}',
+                                            style: TextStyle(
+                                              color: Colors.grey[600],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      trailing: const Icon(
+                                        Icons.chevron_right_rounded,
+                                      ),
+                                      onTap: () {
+                                        // Show store details
+                                        _showStoreDetails(store);
+                                      },
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                            // Pagination Controls
+                            if (filteredStores.length > _itemsPerPage)
+                              Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.grey.shade300,
+                                      blurRadius: 4,
+                                      offset: const Offset(0, -2),
+                                    ),
+                                  ],
+                                ),
+                                child: Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.chevron_left),
+                                      onPressed: _currentPage > 0
+                                          ? () {
+                                              setState(() {
+                                                _currentPage--;
+                                              });
+                                            }
+                                          : null,
+                                    ),
+                                    Text(
+                                      'Page ${_currentPage + 1} of ${(filteredStores.length / _itemsPerPage).ceil()}',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.chevron_right),
+                                      onPressed:
+                                          (_currentPage + 1) * _itemsPerPage <
+                                              filteredStores.length
+                                          ? () {
+                                              setState(() {
+                                                _currentPage++;
+                                              });
+                                            }
+                                          : null,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                ),
+              ],
             ),
     );
   }
