@@ -56,7 +56,7 @@ class _AdminScreenState extends State<AdminScreen> {
     try {
       final response = await Supabase.instance.client
           .from('users_db')
-          .select('user_id, email, fullname, role, status')
+          .select('user_id, email, fullname, role, status, agent_code')
           .eq('status', selectedStatusFilter)
           .order('email');
       setState(() {
@@ -88,6 +88,9 @@ class _AdminScreenState extends State<AdminScreen> {
     final emailController = TextEditingController(text: user?['email']);
     final fullnameController = TextEditingController(text: user?['fullname']);
     final passwordController = TextEditingController();
+    final agentCodeController = TextEditingController(
+      text: user?['agent_code'],
+    );
     String selectedRole = user?['role'] ?? 'agent';
     int selectedStatus = user?['status'] ?? 1;
     bool isPasswordVisible = false;
@@ -225,6 +228,24 @@ class _AdminScreenState extends State<AdminScreen> {
                   ),
                   const SizedBox(height: 16),
 
+                  // Agent Code Field (only for agents)
+                  if (selectedRole == 'agent') ...[
+                    TextField(
+                      controller: agentCodeController,
+                      decoration: InputDecoration(
+                        labelText: 'Agent Code *',
+                        hintText: 'Enter agent code',
+                        prefixIcon: const Icon(Icons.qr_code_rounded),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        filled: true,
+                        fillColor: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+
                   TextField(
                     controller: passwordController,
                     decoration: InputDecoration(
@@ -340,7 +361,9 @@ class _AdminScreenState extends State<AdminScreen> {
                         onPressed: () async {
                           if (emailController.text.isEmpty ||
                               fullnameController.text.isEmpty ||
-                              (!isEdit && passwordController.text.isEmpty)) {
+                              (!isEdit && passwordController.text.isEmpty) ||
+                              (selectedRole == 'agent' &&
+                                  agentCodeController.text.isEmpty)) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 content: const Row(
@@ -369,6 +392,8 @@ class _AdminScreenState extends State<AdminScreen> {
                                 'fullname': fullnameController.text,
                                 'role': selectedRole,
                                 'status': selectedStatus,
+                                if (selectedRole == 'agent')
+                                  'agent_code': agentCodeController.text,
                               };
 
                               bool passwordUpdated = false;
@@ -444,6 +469,10 @@ class _AdminScreenState extends State<AdminScreen> {
                                         fullnameController.text;
                                     users[index]['role'] = selectedRole;
                                     users[index]['status'] = selectedStatus;
+                                    if (selectedRole == 'agent') {
+                                      users[index]['agent_code'] =
+                                          agentCodeController.text;
+                                    }
                                   }
                                 });
                               }
@@ -511,6 +540,8 @@ class _AdminScreenState extends State<AdminScreen> {
                                     'fullname': fullnameController.text,
                                     'role': selectedRole,
                                     'status': selectedStatus,
+                                    if (selectedRole == 'agent')
+                                      'agent_code': agentCodeController.text,
                                   });
 
                               // Add to local list immediately
@@ -522,6 +553,8 @@ class _AdminScreenState extends State<AdminScreen> {
                                     'fullname': fullnameController.text,
                                     'role': selectedRole,
                                     'status': selectedStatus,
+                                    if (selectedRole == 'agent')
+                                      'agent_code': agentCodeController.text,
                                   });
                                 });
                               }

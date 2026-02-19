@@ -223,11 +223,14 @@ class _AgentScreenState extends State<AgentScreen> {
     if (user != null) {
       final prefs = await SharedPreferences.getInstance();
       final cachedFullname = prefs.getString('user_fullname');
+      final cachedAgentCode = prefs.getString('user_agent_code');
 
       // Set cached values immediately
       if (mounted) {
         setState(() {
-          _agentCodeController.text = user.id;
+          if (cachedAgentCode != null && cachedAgentCode.isNotEmpty) {
+            _agentCodeController.text = cachedAgentCode;
+          }
           if (cachedFullname != null && cachedFullname.isNotEmpty) {
             _salesPersonController.text = cachedFullname;
             _agentFullName = cachedFullname;
@@ -239,26 +242,31 @@ class _AgentScreenState extends State<AgentScreen> {
       try {
         final response = await Supabase.instance.client
             .from('users_db')
-            .select('fullname')
+            .select('fullname, agent_code')
             .eq('user_id', user.id)
             .single();
 
         final fullname = response['fullname'] ?? '';
+        final agentCode = response['agent_code'] ?? '';
 
-        // Cache the fullname
+        // Cache the fullname and agent_code
         await prefs.setString('user_fullname', fullname);
+        await prefs.setString('user_agent_code', agentCode);
 
         if (mounted) {
           setState(() {
             _salesPersonController.text = fullname;
             _agentFullName = fullname;
+            _agentCodeController.text = agentCode;
           });
         }
       } catch (e) {
         // If offline or error, cached values are already set above
-        if (mounted && cachedFullname == null) {
+        if (mounted && (cachedFullname == null || cachedAgentCode == null)) {
           setState(() {
-            _agentCodeController.text = user.id;
+            if (cachedAgentCode == null) {
+              _agentCodeController.text = user.id;
+            }
           });
         }
       }
@@ -1122,11 +1130,14 @@ class _StoreFormScreenState extends State<StoreFormScreen> {
     if (user != null) {
       final prefs = await SharedPreferences.getInstance();
       final cachedFullname = prefs.getString('user_fullname');
+      final cachedAgentCode = prefs.getString('user_agent_code');
 
       // Set cached values immediately
       if (mounted) {
         setState(() {
-          _agentCodeController.text = user.id;
+          if (cachedAgentCode != null && cachedAgentCode.isNotEmpty) {
+            _agentCodeController.text = cachedAgentCode;
+          }
           if (cachedFullname != null && cachedFullname.isNotEmpty) {
             _salesPersonController.text = cachedFullname;
           }
@@ -1137,25 +1148,30 @@ class _StoreFormScreenState extends State<StoreFormScreen> {
       try {
         final response = await Supabase.instance.client
             .from('users_db')
-            .select('fullname')
+            .select('fullname, agent_code')
             .eq('user_id', user.id)
             .single();
 
         final fullname = response['fullname'] ?? '';
+        final agentCode = response['agent_code'] ?? '';
 
-        // Cache the fullname
+        // Cache the fullname and agent_code
         await prefs.setString('user_fullname', fullname);
+        await prefs.setString('user_agent_code', agentCode);
 
         if (mounted) {
           setState(() {
             _salesPersonController.text = fullname;
+            _agentCodeController.text = agentCode;
           });
         }
       } catch (e) {
         // If offline or error, cached values are already set above
-        if (mounted && cachedFullname == null) {
+        if (mounted && (cachedFullname == null || cachedAgentCode == null)) {
           setState(() {
-            _agentCodeController.text = user.id;
+            if (cachedAgentCode == null) {
+              _agentCodeController.text = user.id;
+            }
           });
         }
       }
