@@ -7,6 +7,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/sync_service.dart';
 import '../services/local_database.dart';
+import 'package:dropdown_search/dropdown_search.dart';
 
 class AgentScreen extends StatefulWidget {
   const AgentScreen({super.key});
@@ -525,62 +526,100 @@ class _AgentScreenState extends State<AgentScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          'Welcome - ${_salesPersonController.text}',
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: const Color(0xFF00529B),
-        foregroundColor: Colors.white,
-        elevation: 0,
-        actions: [
-          if (_pendingUploads > 0)
-            Stack(
-              children: [
-                IconButton(
-                  icon: Icon(
-                    _syncStatus == SyncStatus.syncing
-                        ? Icons.sync
-                        : Icons.cloud_upload_outlined,
-                  ),
-                  onPressed: () => _syncService.syncPendingStores(),
-                  tooltip: 'Sync pending stores',
-                ),
-                Positioned(
-                  right: 8,
-                  top: 8,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: _syncStatus == SyncStatus.error
-                          ? Colors.red
-                          : Colors.orange,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Text(
-                      _pendingUploads > 9 ? '9+' : '$_pendingUploads',
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(160),
+        child: ClipPath(
+          clipper: AppBarClipper(),
+          child: Container(
+            height: 200, // <-- THIS controls the REAL height
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFF0052D4),
+                  Color(0xFF4364F7),
+                  Color(0xFF6FB1FC),
+                ],
+              ),
+            ),
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Agent Name: ${_salesPersonController.text}\nAgent Code: ${_agentCodeController.text}',
                       style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
                         fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        fontSize: 15,
                       ),
                     ),
-                  ),
+
+                    Row(
+                      children: [
+                        if (_pendingUploads > 0)
+                          Stack(
+                            children: [
+                              IconButton(
+                                icon: Icon(
+                                  _syncStatus == SyncStatus.syncing
+                                      ? Icons.sync
+                                      : Icons.cloud_upload_outlined,
+                                  color: Colors.white,
+                                ),
+                                onPressed: () =>
+                                    _syncService.syncPendingStores(),
+                              ),
+                              Positioned(
+                                right: 8,
+                                top: 8,
+                                child: Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: BoxDecoration(
+                                    color: _syncStatus == SyncStatus.error
+                                        ? Colors.red
+                                        : Colors.orange,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Text(
+                                    _pendingUploads > 9
+                                        ? '9+'
+                                        : '$_pendingUploads',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        IconButton(
+                          icon: const Icon(
+                            Icons.logout_rounded,
+                            color: Colors.white,
+                          ),
+                          onPressed: () async {
+                            await Supabase.instance.client.auth.signOut();
+                            if (context.mounted) {
+                              Navigator.of(context).pushReplacementNamed('/');
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
-          IconButton(
-            icon: const Icon(Icons.logout_rounded),
-            onPressed: () async {
-              await Supabase.instance.client.auth.signOut();
-              if (context.mounted) {
-                Navigator.of(context).pushReplacementNamed('/');
-              }
-            },
-            tooltip: 'Logout',
           ),
-        ],
+        ),
       ),
+
       backgroundColor: const Color(0xFFF8F9FA),
       body: SingleChildScrollView(
         child: Padding(
@@ -989,6 +1028,30 @@ class StoreFormScreen extends StatefulWidget {
 
   @override
   State<StoreFormScreen> createState() => _StoreFormScreenState();
+}
+
+// Custom Clipper for AppBar with curved bottom
+class AppBarClipper extends CustomClipper<Path> {
+  @override
+  Path getClip(Size size) {
+    Path path = Path();
+    path.lineTo(0, size.height - 40);
+
+    path.quadraticBezierTo(
+      size.width / 2,
+      size.height,
+      size.width,
+      size.height - 40,
+    );
+
+    path.lineTo(size.width, 0);
+    path.close();
+
+    return path;
+  }
+
+  @override
+  bool shouldReclip(CustomClipper<Path> oldClipper) => false;
 }
 
 class _StoreFormScreenState extends State<StoreFormScreen> {
@@ -1471,23 +1534,29 @@ class _StoreFormScreenState extends State<StoreFormScreen> {
                         const SizedBox(height: 16),
 
                         // Territory
-                        DropdownButtonFormField<String>(
-                          value: _selectedTerritory,
-                          decoration: InputDecoration(
-                            labelText: 'Territory',
-                            prefixIcon: const Icon(Icons.map_rounded),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
+                        DropdownSearch<String>(
+                          items: _territories,
+                          selectedItem: _selectedTerritory,
+                          dropdownDecoratorProps: DropDownDecoratorProps(
+                            dropdownSearchDecoration: InputDecoration(
+                              labelText: 'Territory',
+                              prefixIcon: const Icon(Icons.map_rounded),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              filled: true,
+                              fillColor: Colors.grey[50],
                             ),
-                            filled: true,
-                            fillColor: Colors.grey[50],
                           ),
-                          items: _territories.map((String territory) {
-                            return DropdownMenuItem<String>(
-                              value: territory,
-                              child: Text(territory),
-                            );
-                          }).toList(),
+                          popupProps: PopupProps.menu(
+                            showSearchBox: true, // <-- enables search
+                            searchFieldProps: TextFieldProps(
+                              decoration: InputDecoration(
+                                hintText: 'Search territory...',
+                                prefixIcon: const Icon(Icons.search),
+                              ),
+                            ),
+                          ),
                           onChanged: (String? newValue) {
                             setState(() {
                               _selectedTerritory = newValue;
