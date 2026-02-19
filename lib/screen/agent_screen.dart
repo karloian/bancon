@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/sync_service.dart';
 import '../services/local_database.dart';
 import 'package:dropdown_search/dropdown_search.dart';
+import 'menu_item.dart';
 
 class AgentScreen extends StatefulWidget {
   const AgentScreen({super.key});
@@ -24,6 +25,18 @@ class _AgentScreenState extends State<AgentScreen> {
   final _contactNumberController = TextEditingController();
   final _completeAddressController = TextEditingController();
   String? _selectedTerritory;
+  List<String> _filteredTerritories = [];
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Initialize filtered territories to all on first build
+    if (_filteredTerritories.isEmpty) {
+      setState(() {
+        _filteredTerritories = List<String>.from(_territories);
+      });
+    }
+  }
+
   final _storeClassificationController = TextEditingController();
   final _tinController = TextEditingController();
   final _paymentTermController = TextEditingController();
@@ -40,6 +53,46 @@ class _AgentScreenState extends State<AgentScreen> {
 
   int _totalStores = 0;
   int _thisMonthStores = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserInfo();
+    _loadStats();
+    _initializeSync();
+    _completeAddressController.addListener(_autoSelectTerritoryFromAddress);
+  }
+
+  void _autoSelectTerritoryFromAddress() {
+    final address = _completeAddressController.text.toLowerCase();
+    List<String> matches = [];
+    String? autoSelect;
+    for (final territory in _territories) {
+      final territoryLower = territory.toLowerCase();
+      if (address.contains(territoryLower)) {
+        matches.add(territory);
+        autoSelect ??= territory;
+      } else {
+        final parts = territoryLower.split(',').map((s) => s.trim()).toList();
+        for (final part in parts) {
+          if (part.isNotEmpty && address.contains(part)) {
+            matches.add(territory);
+            autoSelect ??= territory;
+            break;
+          }
+        }
+      }
+    }
+    setState(() {
+      _filteredTerritories = matches.isNotEmpty
+          ? matches
+          : List<String>.from(_territories);
+      if (autoSelect != null) {
+        _selectedTerritory = autoSelect;
+      }
+    });
+  }
+
   bool _isLoadingStats = false;
   List<int> _monthlyStores = List.filled(12, 0);
 
@@ -188,14 +241,6 @@ class _AgentScreenState extends State<AgentScreen> {
     'Valladolid, Negros Occidental',
   ];
 
-  @override
-  void initState() {
-    super.initState();
-    _loadUserInfo();
-    _loadStats();
-    _initializeSync();
-  }
-
   void _initializeSync() {
     _syncService.startListening();
     _updatePendingCount();
@@ -329,6 +374,7 @@ class _AgentScreenState extends State<AgentScreen> {
     _storeNameController.dispose();
     _purchaserOwnerController.dispose();
     _contactNumberController.dispose();
+    _completeAddressController.removeListener(_autoSelectTerritoryFromAddress);
     _completeAddressController.dispose();
     _storeClassificationController.dispose();
     _tinController.dispose();
@@ -628,37 +674,46 @@ class _AgentScreenState extends State<AgentScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 8),
-              // Action Cards
-              Row(
+
+              // Grid Menu
+              GridView.count(
+                crossAxisCount: 4,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                mainAxisSpacing: 16,
+                crossAxisSpacing: 8,
+                childAspectRatio: 0.8,
                 children: [
-                  Expanded(
-                    child: _buildActionCard(
-                      'New Store',
-                      Icons.add_business_rounded,
-                      Colors.green,
-                      () => _showStoreForm(),
-                    ),
+                  MenuItem(
+                    icon: Icons.add_business_rounded,
+                    label: 'New Store',
+                    color: Colors.green,
+                    onTap: _showStoreForm,
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _buildActionCard(
-                      'View All Stores',
-                      Icons.list_alt_rounded,
-                      const Color(0xFF00529B),
-                      () => _viewAllStores(),
-                    ),
+                  MenuItem(
+                    icon: Icons.list_alt_rounded,
+                    label: 'View All',
+                    color: const Color(0xFF00529B),
+                    onTap: _viewAllStores,
                   ),
+                  MenuItem(
+                    icon: Icons.cloud_upload_outlined,
+                    label: 'Pending Sync',
+                    color: Colors.orange,
+                    onTap: _viewPendingStores,
+                    badge: _pendingUploads > 0
+                        ? _pendingUploads.toString()
+                        : null,
+                  ),
+                  MenuItem(
+                    icon: Icons.bar_chart_rounded,
+                    label: 'Analytics',
+                    color: Colors.blue,
+                    onTap: () {},
+                  ),
+                  // Add more menu items as needed
                 ],
               ),
-              const SizedBox(height: 16),
-              // Pending Sync Card
-              if (_pendingUploads > 0)
-                _buildActionCard(
-                  'Pending Sync ($_pendingUploads)',
-                  Icons.cloud_upload_outlined,
-                  Colors.orange,
-                  () => _viewPendingStores(),
-                ),
               const SizedBox(height: 32),
 
               // Analytics Section
@@ -885,7 +940,7 @@ class _AgentScreenState extends State<AgentScreen> {
       onTap: onTap,
       borderRadius: BorderRadius.circular(20),
       child: Container(
-        height: 140,
+        height: 90,
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: [Colors.white, color.withOpacity(0.05)],
@@ -904,6 +959,7 @@ class _AgentScreenState extends State<AgentScreen> {
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Container(
               padding: const EdgeInsets.all(12),
@@ -917,15 +973,15 @@ class _AgentScreenState extends State<AgentScreen> {
               ),
               child: Icon(icon, size: 32, color: color),
             ),
-            const SizedBox(height: 12),
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: color,
+            const SizedBox(height: 8),
+            Flexible(
+              child: Text(
+                title,
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 2,
+                textAlign: TextAlign.center,
               ),
-              textAlign: TextAlign.center,
             ),
           ],
         ),
@@ -1055,6 +1111,53 @@ class AppBarClipper extends CustomClipper<Path> {
 }
 
 class _StoreFormScreenState extends State<StoreFormScreen> {
+  List<String> _filteredTerritories = [];
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_filteredTerritories.isEmpty) {
+      setState(() {
+        _filteredTerritories = List<String>.from(_territories);
+      });
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _completeAddressController.addListener(_autoSelectTerritoryFromAddress);
+  }
+
+  void _autoSelectTerritoryFromAddress() {
+    final address = _completeAddressController.text.toLowerCase();
+    List<String> matches = [];
+    String? autoSelect;
+    for (final territory in _territories) {
+      final territoryLower = territory.toLowerCase();
+      if (address.contains(territoryLower)) {
+        matches.add(territory);
+        autoSelect ??= territory;
+      } else {
+        final parts = territoryLower.split(',').map((s) => s.trim()).toList();
+        for (final part in parts) {
+          if (part.isNotEmpty && address.contains(part)) {
+            matches.add(territory);
+            autoSelect ??= territory;
+            break;
+          }
+        }
+      }
+    }
+    setState(() {
+      _filteredTerritories = matches.isNotEmpty
+          ? matches
+          : List<String>.from(_territories);
+      if (autoSelect != null) {
+        _selectedTerritory = autoSelect;
+      }
+    });
+  }
+
   final _formKey = GlobalKey<FormState>();
   final _dateController = TextEditingController();
   final _storeNameController = TextEditingController();
@@ -1181,12 +1284,6 @@ class _StoreFormScreenState extends State<StoreFormScreen> {
     'Iloilo City, Iloilo',
     'Passi City, Iloilo',
   ];
-
-  @override
-  void initState() {
-    super.initState();
-    _loadUserInfo();
-  }
 
   Future<void> _loadUserInfo() async {
     final user = Supabase.instance.client.auth.currentUser;
@@ -1535,7 +1632,7 @@ class _StoreFormScreenState extends State<StoreFormScreen> {
 
                         // Territory
                         DropdownSearch<String>(
-                          items: _territories,
+                          items: _filteredTerritories,
                           selectedItem: _selectedTerritory,
                           dropdownDecoratorProps: DropDownDecoratorProps(
                             dropdownSearchDecoration: InputDecoration(
@@ -1549,7 +1646,7 @@ class _StoreFormScreenState extends State<StoreFormScreen> {
                             ),
                           ),
                           popupProps: PopupProps.menu(
-                            showSearchBox: true, // <-- enables search
+                            showSearchBox: true,
                             searchFieldProps: TextFieldProps(
                               decoration: InputDecoration(
                                 hintText: 'Search territory...',
@@ -1636,38 +1733,44 @@ class _StoreFormScreenState extends State<StoreFormScreen> {
                         const SizedBox(height: 16),
 
                         // Agent Code
-                        TextFormField(
-                          controller: _agentCodeController,
-                          decoration: InputDecoration(
-                            labelText: 'Agent Code',
-                            prefixIcon: const Icon(Icons.qr_code_rounded),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
+                        Visibility(
+                          visible: false,
+                          child: TextFormField(
+                            controller: _agentCodeController,
+                            decoration: InputDecoration(
+                              labelText: 'Agent Code',
+                              prefixIcon: const Icon(Icons.qr_code_rounded),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              filled: true,
+                              fillColor: Colors.grey[100],
                             ),
-                            filled: true,
-                            fillColor: Colors.grey[100],
+                            enabled: false,
+                            validator: (value) =>
+                                value?.isEmpty ?? true ? 'Required' : null,
                           ),
-                          enabled: false,
-                          validator: (value) =>
-                              value?.isEmpty ?? true ? 'Required' : null,
                         ),
                         const SizedBox(height: 16),
 
                         // Sales Person
-                        TextFormField(
-                          controller: _salesPersonController,
-                          decoration: InputDecoration(
-                            labelText: 'Sales Person',
-                            prefixIcon: const Icon(Icons.person_pin_rounded),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
+                        Visibility(
+                          visible: false,
+                          child: TextFormField(
+                            controller: _salesPersonController,
+                            decoration: InputDecoration(
+                              labelText: 'Sales Person',
+                              prefixIcon: const Icon(Icons.person_pin_rounded),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              filled: true,
+                              fillColor: Colors.grey[100],
                             ),
-                            filled: true,
-                            fillColor: Colors.grey[100],
+                            enabled: false,
+                            validator: (value) =>
+                                value?.isEmpty ?? true ? 'Required' : null,
                           ),
-                          enabled: false,
-                          validator: (value) =>
-                              value?.isEmpty ?? true ? 'Required' : null,
                         ),
                       ],
                     ),
