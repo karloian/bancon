@@ -18,6 +18,30 @@ class AgentScreen extends StatefulWidget {
 }
 
 class _AgentScreenState extends State<AgentScreen> {
+  Future<void> _updateStatus2Count() async {
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) return;
+      final response = await Supabase.instance.client
+          .from('store_information')
+          .select('status')
+          .eq('agent_id', user.id);
+      int count = 0;
+      for (var store in response) {
+        if ((store['status'] ?? 0) == 2) count++;
+      }
+      if (mounted) {
+        setState(() {
+          _status2Count = count;
+        });
+      }
+    } catch (e) {
+      // ignore error
+    }
+  }
+
+  int _status2Count = 0;
+  dynamic _realtimeChannel;
   final _formKey = GlobalKey<FormState>();
   final _dateController = TextEditingController();
   final _storeNameController = TextEditingController();
@@ -60,6 +84,7 @@ class _AgentScreenState extends State<AgentScreen> {
     _loadUserInfo();
     _loadStats();
     _initializeSync();
+    _setupRealtimeNotification();
     _completeAddressController.addListener(_autoSelectTerritoryFromAddress);
   }
 
@@ -241,6 +266,29 @@ class _AgentScreenState extends State<AgentScreen> {
     'Valladolid, Negros Occidental',
   ];
 
+  void _setupRealtimeNotification() {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+
+    _realtimeChannel = Supabase.instance.client
+        .channel('agent_store_status_changes')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'store_information',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'agent_id',
+            value: user.id,
+          ),
+          callback: (payload) {
+            // Re-count status==2 rows on any insert, update, or delete
+            _updateStatus2Count();
+          },
+        )
+        .subscribe();
+  }
+
   void _initializeSync() {
     _syncService.startListening();
     _updatePendingCount();
@@ -320,6 +368,8 @@ class _AgentScreenState extends State<AgentScreen> {
   }
 
   Future<void> _loadStats() async {
+    await _updateStatus2Count();
+
     setState(() => _isLoadingStats = true);
 
     try {
@@ -382,6 +432,7 @@ class _AgentScreenState extends State<AgentScreen> {
     _priceLevelController.dispose();
     _agentCodeController.dispose();
     _salesPersonController.dispose();
+    _realtimeChannel?.unsubscribe();
     super.dispose();
   }
 
@@ -571,6 +622,16 @@ class _AgentScreenState extends State<AgentScreen> {
 
   @override
   Widget build(BuildContext context) {
+    int _selectedIndex = 0;
+    void _onFooterTap(int index) {
+      if (index == 1) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const NotificationScreen()),
+        );
+      }
+    }
+
     return Scaffold(
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(160),
@@ -785,7 +846,7 @@ class _AgentScreenState extends State<AgentScreen> {
                         ),
                         const SizedBox(height: 20),
                         SizedBox(
-                          height: 250,
+                          height: 200,
                           child: BarChart(
                             BarChartData(
                               alignment: BarChartAlignment.spaceAround,
@@ -926,6 +987,53 @@ class _AgentScreenState extends State<AgentScreen> {
             ],
           ),
         ),
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _selectedIndex,
+        onTap: _onFooterTap,
+        items: [
+          const BottomNavigationBarItem(
+            icon: Icon(Icons.home_rounded),
+            label: 'Home',
+          ),
+          BottomNavigationBarItem(
+            icon: Stack(
+              children: [
+                Icon(Icons.notifications_rounded),
+                if (_status2Count > 0)
+                  Positioned(
+                    right: 0,
+                    top: 0,
+                    child: Container(
+                      padding: const EdgeInsets.all(3),
+                      decoration: const BoxDecoration(
+                        color: Colors.red,
+                        shape: BoxShape.circle,
+                      ),
+                      constraints: const BoxConstraints(
+                        minWidth: 18,
+                        minHeight: 18,
+                      ),
+                      child: Text(
+                        '$_status2Count',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            label: 'Notification',
+          ),
+          const BottomNavigationBarItem(
+            icon: Icon(Icons.person_rounded),
+            label: 'Profile',
+          ),
+        ],
       ),
     );
   }
@@ -1109,6 +1217,265 @@ class AppBarClipper extends CustomClipper<Path> {
   @override
   bool shouldReclip(CustomClipper<Path> oldClipper) => false;
 }
+
+//NotificationScreen
+class NotificationScreen extends StatefulWidget {
+  const NotificationScreen({super.key});
+
+  @override
+  State<NotificationScreen> createState() => _NotificationScreenState();
+}
+
+class _NotificationScreenState extends State<NotificationScreen> {
+  List<Map<String, dynamic>> _approvedStores = [];
+  bool _isLoading = false;
+  dynamic _realtimeChannel;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadApprovedStores();
+    _setupRealtime();
+  }
+
+  void _setupRealtime() {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+
+    _realtimeChannel = Supabase.instance.client
+        .channel('notification_status2')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'store_information',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'agent_id',
+            value: user.id,
+          ),
+          callback: (payload) {
+            _loadApprovedStores();
+          },
+        )
+        .subscribe();
+  }
+
+  Future<void> _loadApprovedStores() async {
+    setState(() => _isLoading = true);
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) return;
+
+      final response = await Supabase.instance.client
+          .from('store_information')
+          .select('store_name, remarks, created_at')
+          .eq('agent_id', user.id)
+          .eq('status', 2)
+          .order('created_at', ascending: false);
+
+      if (mounted) {
+        setState(() {
+          _approvedStores = List<Map<String, dynamic>>.from(response);
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading notifications: $e')),
+        );
+      }
+    }
+  }
+
+  String _timeAgo(String? dateStr) {
+    if (dateStr == null) return '';
+    final date = DateTime.tryParse(dateStr);
+    if (date == null) return '';
+    final diff = DateTime.now().difference(date);
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    return '${diff.inDays}d ago';
+  }
+
+  @override
+  void dispose() {
+    _realtimeChannel?.unsubscribe();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.grey[100],
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        title: const Text(
+          'Notifications',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 22),
+        ),
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
+        elevation: 1,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded),
+            onPressed: _loadApprovedStores,
+          ),
+        ],
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _approvedStores.isEmpty
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.notifications_none,
+                    size: 80,
+                    color: Colors.grey[400],
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'No notifications yet',
+                    style: TextStyle(
+                      fontSize: 18,
+                      color: Colors.grey[600],
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          : ListView(
+              children: [
+                // "New" section header
+                _buildSectionHeader('New'),
+                ..._approvedStores.map(
+                  (store) => _buildNotificationTile(store),
+                ),
+              ],
+            ),
+      bottomNavigationBar: AppFooter(currentIndex: -1),
+    );
+  }
+
+  Widget _buildSectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+      child: Text(
+        title,
+        style: const TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
+          color: Colors.black87,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNotificationTile(Map<String, dynamic> store) {
+    return Container(
+      color: const Color(0xFFE8F0FE),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        leading: CircleAvatar(
+          radius: 28,
+          backgroundColor: Colors.green.shade100,
+          child: const Icon(Icons.store_rounded, color: Colors.green, size: 28),
+        ),
+        title: RichText(
+          text: TextSpan(
+            style: const TextStyle(color: Colors.black87, fontSize: 14),
+            children: [
+              TextSpan(
+                text: store['store_name'] ?? 'N/A',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const TextSpan(text: ' has been '),
+              const TextSpan(
+                text: 'approved for encoding.',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if ((store['remarks'] ?? '').toString().isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  'Remarks: ${store['remarks']}',
+                  style: TextStyle(color: Colors.grey[700], fontSize: 13),
+                ),
+              ),
+            const SizedBox(height: 4),
+            Text(
+              _timeAgo(store['created_at']),
+              style: const TextStyle(
+                color: Colors.blue,
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+        trailing: const Icon(Icons.more_horiz, color: Colors.grey),
+      ),
+    );
+  }
+}
+
+// Notification Screen
+
+//notification footer
+
+class AppFooter extends StatelessWidget {
+  final int currentIndex;
+
+  const AppFooter({super.key, required this.currentIndex});
+
+  @override
+  Widget build(BuildContext context) {
+    return BottomNavigationBar(
+      currentIndex: currentIndex < 0 ? 0 : currentIndex,
+      onTap: (index) {
+        if (index == currentIndex)
+          return; // -1 never equals 0 or 1, so always navigates
+        if (index == 0) {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (context) => const AgentScreen()),
+            (route) => false,
+          );
+        } else if (index == 1) {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (context) => const NotificationScreen()),
+            (route) => false,
+          );
+        }
+      },
+      selectedItemColor: const Color(0xFF00529B),
+      unselectedItemColor: Colors.grey,
+      items: const [
+        BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: 'Home'),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.notifications_rounded),
+          label: 'Notification',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.person_rounded),
+          label: 'Profile',
+        ),
+      ],
+    );
+  }
+}
+
+//end of notification footer
 
 class _StoreFormScreenState extends State<StoreFormScreen> {
   List<String> _filteredTerritories = [];
@@ -1510,6 +1877,7 @@ class _StoreFormScreenState extends State<StoreFormScreen> {
     return Scaffold(
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
+        automaticallyImplyLeading: false,
         title: const Text(
           'New Store Information',
           style: TextStyle(fontWeight: FontWeight.bold),
@@ -1518,6 +1886,7 @@ class _StoreFormScreenState extends State<StoreFormScreen> {
         foregroundColor: Colors.white,
         elevation: 0,
       ),
+      bottomNavigationBar: AppFooter(currentIndex: -1),
       body: SingleChildScrollView(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
@@ -1938,6 +2307,8 @@ class _StoresListScreenState extends State<StoresListScreen> {
           ),
         ],
       ),
+      bottomNavigationBar: AppFooter(currentIndex: -1),
+
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
           : Column(
